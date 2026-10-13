@@ -7,17 +7,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
+import java.time.ZoneId
 
 /**
- * Single source of truth for plan + daily records.
+ * Single source of truth for plan + daily records + reminder state.
  *
  * Everything lives in this app's private SharedPreferences as small JSON blobs, so the
- * app needs no permission, no network and no database. State is exposed as StateFlow so
- * Compose redraws on every change, and every write goes straight to disk.
+ * app needs no database and no network. State is exposed as StateFlow so Compose redraws
+ * on every change, and every write goes straight to disk.
  *
  * Records are per group, not per count: each group carries the moment it was ticked
  * (see [SetMark]). Storage format is v2 — the old v1 files (a bare group count) are not
  * migrated: nothing reads them, an unreadable file simply means "no records yet".
+ *
+ * The pending reminders are **derived**, never stored (see [pendings]): fewer stored facts,
+ * fewer ways for the stored state and the real state to disagree.
  */
 class WorkoutStore(context: Context) {
 
@@ -29,6 +33,40 @@ class WorkoutStore(context: Context) {
 
     val plan: StateFlow<List<Exercise>> = planFlow.asStateFlow()
     val records: StateFlow<Map<String, DayLog>> = recordsFlow.asStateFlow()
+
+    /* ------------------------------------------------------------ reminders */
+
+    private val reminderSettingsFlow = MutableStateFlow(readReminderSettings())
+    private val lastTickFlow = MutableStateFlow(readTime(KEY_LAST_TICK))
+    private val notifiedFlow = MutableStateFlow(readTime(KEY_NOTIFIED_DUE))
+
+    val reminderSettings: StateFlow<ReminderSettings> = reminderSettingsFlow.asStateFlow()
+
+    /** 上一次"刚做完一组"的时刻，组间提醒以它为基准 */
+    val lastTickAt: StateFlow<Long?> = lastTickFlow.asStateFlow()
+
+    fun updateReminderSettings(settings: ReminderSettings) {
+        reminderSettingsFlow.value = settings
+        prefs.edit().putString(KEY_REMINDER_SETTINGS, reminderSettingsToJson(settings)).apply()
+    }
+
+    fun lastNotifiedDueAt(): Long? = notifiedFlow.value
+
+    /** 记下"这一次提醒确实发出去了"，避免重复打扰 */
+    fun markNotified(dueAt: Long) {
+        notifiedFlow.value = dueAt
+        prefs.edit().putLong(KEY_NOTIFIED_DUE, dueAt).apply()
+    }
+
+    /** 此刻尚未处理的提醒（到期已过但仍未处理的也在里面，见 planReminders） */
+    fun pendings(now: Long = System.currentTimeMillis()): List<PendingReminder> = planReminders(
+        now = now,
+        settings = reminderSettingsFlow.value,
+        records = recordsFlow.value,
+        plan = planFlow.value,
+        lastTickAt = lastTickFlow.value,
+        zone = ZoneId.systemDefault(),
+    )
 
     fun today(): String = LocalDate.now().toString()
 
@@ -71,6 +109,10 @@ class WorkoutStore(context: Context) {
         val current = recordsFlow.value[date]?.get(exerciseId).orEmpty()
         val next = transform(current, exercise).take(exercise.sets)
 
+        // 多做了几组 = 刚完成一组 → 组间提醒以此刻为基准重新起算。
+        // 撤销不改变基准（物理上你已经休息过了），因此只看"变多"。
+        if (next.size > current.size && date == today()) touchLastTick()
+
         val day = recordsFlow.value[date].orEmpty().toMutableMap()
         if (next.isEmpty()) day.remove(exerciseId) else day[exerciseId] = next
 
@@ -80,6 +122,39 @@ class WorkoutStore(context: Context) {
     }
 
     private fun now(): Long = System.currentTimeMillis()
+
+    private fun touchLastTick() {
+        val at = now()
+        lastTickFlow.value = at
+        prefs.edit().putLong(KEY_LAST_TICK, at).apply()
+    }
+
+    private fun readTime(key: String): Long? = prefs.getLong(key, 0L).takeIf { it > 0L }
+
+    private fun readReminderSettings(): ReminderSettings = runCatching {
+        val raw = prefs.getString(KEY_REMINDER_SETTINGS, null)
+            ?: return@runCatching ReminderSettings.DEFAULT
+        val obj = JSONObject(raw)
+        val window = runCatching {
+            ActivityWindow(
+                startMinuteOfDay = obj.optInt("windowStart", ActivityWindow.DEFAULT.startMinuteOfDay),
+                endMinuteOfDay = obj.optInt("windowEnd", ActivityWindow.DEFAULT.endMinuteOfDay),
+            )
+        }.getOrDefault(ActivityWindow.DEFAULT)
+        ReminderSettings(
+            enabled = obj.optBoolean("enabled", false),
+            intervalMinutes = obj.optInt("intervalMinutes", ReminderSettings.DEFAULT_INTERVAL_MINUTES)
+                .coerceIn(ReminderSettings.MIN_INTERVAL_MINUTES, ReminderSettings.MAX_INTERVAL_MINUTES),
+            window = window,
+        )
+    }.getOrDefault(ReminderSettings.DEFAULT)
+
+    private fun reminderSettingsToJson(settings: ReminderSettings): String = JSONObject()
+        .put("enabled", settings.enabled)
+        .put("intervalMinutes", settings.intervalMinutes)
+        .put("windowStart", settings.window.startMinuteOfDay)
+        .put("windowEnd", settings.window.endMinuteOfDay)
+        .toString()
 
     /* ---------------------------------------------------------------- plan */
 
@@ -201,6 +276,13 @@ class WorkoutStore(context: Context) {
         const val PREFS = "workout_store"
         const val KEY_PLAN = "plan_json"
         const val KEY_RECORDS = "records_json"
+        const val KEY_REMINDER_SETTINGS = "reminder_settings_json"
+
+        /** 上一次"刚做完一组"的时刻（组间提醒的基准） */
+        const val KEY_LAST_TICK = "reminder_last_tick"
+
+        /** 最后一次确实发出通知的那条提醒的到期时间 */
+        const val KEY_NOTIFIED_DUE = "reminder_notified_due"
 
         /** records format version written by this build; older files are not read */
         const val FORMAT_V2 = 2

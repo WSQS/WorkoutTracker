@@ -74,6 +74,7 @@ fun TodayScreen(
     done: DayLog,
     dateIso: String,
     streak: Int,
+    reminderText: String? = null,
     onTapSet: (exerciseId: String, setIndex: Int) -> Unit,
     onAddSets: (exerciseId: String, delta: Int) -> Unit,
     onCompleteAll: (exerciseId: String) -> Unit,
@@ -102,6 +103,7 @@ fun TodayScreen(
             window = window,
             duration = duration,
             bulk = bulk,
+            reminderText = reminderText,
         )
 
         plan.forEach { exercise ->
@@ -144,6 +146,7 @@ private fun SummaryCard(
     window: Pair<Long, Long>?,
     duration: Long?,
     bulk: Int,
+    reminderText: String?,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -197,6 +200,14 @@ private fun SummaryCard(
                 text = "已完成 $reps / $target 个",
                 style = MaterialTheme.typography.bodyMedium,
             )
+
+            if (reminderText != null) {
+                Text(
+                    text = reminderText,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
 
             if (window != null) {
                 Text(

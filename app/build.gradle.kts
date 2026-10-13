@@ -32,8 +32,8 @@ android {
         // CI passes the version derived from the release tag (-PversionName=1.2.0 -PversionCode=10200);
         // local builds just use these defaults. versionCode must keep growing, otherwise Android
         // refuses to install the new APK over the old one as an update.
-        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
-        versionName = (findProperty("versionName") as String?)?.removePrefix("v") ?: "1.1.0"
+        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 10200
+        versionName = (findProperty("versionName") as String?)?.removePrefix("v") ?: "1.2.0"
     }
 
     signingConfigs {

@@ -66,11 +66,15 @@ private enum class ConfirmAction(
 @Composable
 fun SettingsScreen(
     plan: List<Exercise>,
+    reminder: ReminderUiState,
     onReps: (id: String, reps: Int) -> Unit,
     onSets: (id: String, sets: Int) -> Unit,
     onResetToday: () -> Unit,
     onClearAll: () -> Unit,
     onRestorePlan: () -> Unit,
+    onReminderEnabled: (Boolean) -> Unit,
+    onIntervalMinutes: (Int) -> Unit,
+    onWindow: (startMinuteOfDay: Int, endMinuteOfDay: Int) -> Unit,
 ) {
     var confirm by remember { mutableStateOf<ConfirmAction?>(null) }
 
@@ -107,6 +111,13 @@ fun SettingsScreen(
                 }
             }
         }
+
+        ReminderSettingsCard(
+            reminder = reminder,
+            onEnabled = onReminderEnabled,
+            onIntervalMinutes = onIntervalMinutes,
+            onWindow = onWindow,
+        )
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -228,7 +239,7 @@ private fun ExerciseEditor(
 }
 
 @Composable
-private fun NumberField(
+internal fun NumberField(
     label: String,
     value: Int,
     range: IntRange,

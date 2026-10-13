@@ -11,9 +11,10 @@
 | 仰卧起坐 | 20 个 | 5 组 | 100 个 |
 
 - 包名：`dev.sopho.workout`
-- 版本：1.1.0（versionCode 2）
+- 版本：1.2.0（versionCode 10200）
 - minSdk 26（Android 8.0+），targetSdk / compileSdk 36
-- 不联网、不申请任何权限、无第三方服务
+- 不联网、无第三方服务。两条权限都与提醒有关：`POST_NOTIFICATIONS`（通知，运行时权限）与
+  `SCHEDULE_EXACT_ALARM`（可选的“精确闹钟”特殊权限，授权后提醒才准点）；除此之外一概不申请
 
 ## 安装
 
@@ -65,17 +66,44 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 「达标」= 当天三个项目全部勾满；「打卡」= 当天至少勾了一组。
 连续达标从今天往前数，今天还没做完不会把昨天之前的连续记录打断。
 
+## 提醒
+
+勾完任意一组，过**间隔**（默认 30 分钟）提醒你做下一组；**活动时间开始**（默认 9:00）时如果今天还没勾过任何一组，提醒一次。
+提醒只在**活动时间**（默认 9:00–18:00）内工作：窗口外勾选不排提醒，到期时间落在窗口外也不排。
+
+- 到点响一次（提示音+震动），通知留在通知栏直到你勾选下一组；同一时刻只保留一条
+- 迟到也照发，并在通知里写明“预定 HH:mm，晚了 N 分钟”；打开应用时若发现提醒已过期，今天页会说明
+- 设置页：提醒总开关、间隔、活动时间、当前模式（精确/近似）、权限状态与快捷入口
+- 用的是**一次性系统闹钟**：不做前台服务、不做常驻通知、不申请开机自启（理由见 `docs/adr/0001`）
+
+**已知的失败模式（都不藏）**
+
+| 情况 | 结果 |
+| --- | --- |
+| 没授权精确闹钟权限 | 退回近似模式：**实测系统给的投递窗口约 22 分钟（30 分钟间隔）到 1 小时（远期闹钟）**，即提醒可能晚这么久 |
+| 用户“强制停止”应用（force-stop／某些 ROM 的“清理”） | **已排的闹钟会被一起清掉**，那次提醒不会来；下次打开应用会在今天页显示“已超时” |
+| 划掉最近任务／应用在后台被冻结 | 闹钟照常送达（这正是本设计的核心：应用可以随时死） |
+| 手机在提醒前重启 | 闹钟丢失，同样靠“已超时”兜底 |
+| 拒绍通知权限 | 一条通知都发不出（Android 13+ 的硬规则）；设置页与今天页会显示“提醒未启用”，不会假装提醒过 |
+| Android Automotive | 通知语义不同、`chronometer` 倒计时不被支持，所以本功能只在手机形态上做验证 |
+
 ## 数据
 
-存在应用私有目录的 SharedPreferences（`workout_store`）里，两个 JSON 键：
+存在应用私有目录的 SharedPreferences（`workout_store`）里，共 5 个键：
 
 ```json
 plan_json:    [{"id":"pushup","name":"俯卧撑","emoji":"💪","reps":10,"sets":8}, ...]
 records_json: {"v":2,"days":{"2026-08-30":{"pushup":[{"at":1788117964287},{"at":null}]}}}
+reminder_settings_json: {"enabled":true,"intervalMinutes":30,"windowStart":540,"windowEnd":1080}
+reminder_last_tick:     上一次“刚做完一组”的时刻（组间提醒的基准）
+reminder_notified_due:  最后一次确实发出通知的那条提醒的到期时间
 ```
 
 `records_json` 里每个项目是一个数组，第 i 项就是第 i+1 组；`at` 是勾选时刻（epoch 毫秒），
 `null` 表示补记。
+
+提醒的**待办本身不落盘**，而是由上面这些状态算出来的（见 `data/Reminder.kt` 的 `planReminders`）：
+少一处存储状态，就少一种“存的和实际不一致”的可能。
 
 **不向后兼容**：v2 只读 `records_json` 里的 `"days"` 结构，1.0.0 写下的旧格式
 （`{"2026-08-30":{"pushup":3}}`）会被当成「还没有记录」而忽略 —— 这是明确取舍，不是 bug。
@@ -175,10 +203,14 @@ app/src/main/java/dev/sopho/workout/
   ui/SettingsScreen.kt     设置（计划编辑、数据操作、关于）
   ui/Format.kt             日期/时间/时长/百分比格式化
   ui/Theme.kt              Material 3 主题（Android 12+ 跟随取色）
-app/src/test/java/dev/sopho/workout/data/{StatsTest,MarksTest}.kt
+app/src/main/java/dev/sopho/workout/data/Reminder.kt   提醒的领域规则（纯函数：窗口、组间、开始、超时）
+app/src/main/java/dev/sopho/workout/reminder/          平台胶水：排闹钟、发通知、接收器、协调器
+app/src/test/java/dev/sopho/workout/data/{StatsTest,MarksTest,ReminderTest}.kt
 ```
 
-## 验证记录（1.1.0）
+## 验证记录
+
+### 1.1.0（每组时间）
 
 - `assembleDebug` + `assembleRelease` + `testDebugUnitTest`：全部成功，**20/20** 测试通过
 - 在 Android 16（SDK 36）车机虚拟机上用 uiautomator 界面树定位点击并断言文本：
@@ -192,9 +224,29 @@ app/src/test/java/dev/sopho/workout/data/{StatsTest,MarksTest}.kt
   - release 包同样验证：5/8 组、`用时 不到 1 分钟 · 含 2 组补记`、弹窗正确、无 `FATAL EXCEPTION`
 - 验证结束后已 `adb uninstall`
 
-## 许可证
+### 1.2.0 提醒（2026-10-13，Android 15 / SDK 35 AVD，手机形态 userdebug）
 
-MIT License —— 见 [LICENSE](LICENSE)。可以自由使用、修改、再分发，保留版权声明即可。
+单测：**44/44 通过**（Marks 12 + Stats 8 + Reminder 24）。
+
+在 AVD（`UE_pixel_6_API_35`，WHPX 加速）上用 `uiautomator` 定位并断言界面、用 `dumpsys` 取证：
+
+- 打开提醒开关后，系统里立刻排上 `tag=*walarm*:dev.sopho.workout.REMINDER_StartOfDay`，`origWhen=2026-10-14 09:00:00.000` ✓
+- 勾一组后，排上 `REMINDER_NextSet`，`origWhen = 勾选时刻 + 间隔`（1 分钟间隔下精确对上）✓，两种用途并存 ✓
+- 今天页显示 `距下一组 0:55（09:00–18:00 内提醒） · 近似模式，可能晚十几分钟到一小时` ✓
+- **应用退到后台**后到点，通知确实被系统投递：`channel=reminder_nextset`、`importance=3`、`category=reminder` ✓
+- 窗口边界：17:59 勾选（到期 18:00 恰在窗口外）→ 提醒行变成 `当前不在活动时间`、不再排组间提醒 ✓
+- `force-stop` 之后 100 秒无通知（闹钟被系统清掉）→ 重开应用显示 `上次排的下一组已超时 18 分钟`（兜底生效）✓
+- 实测近似闹钟的投递窗口：30 分钟间隔 → `window=+22m29s`；远期闹钟 → `window=+1h0m0s`
+  ⇒ **未授权精确闹钟时“晚几分钟”是不可能的，“晚十几分钟到一小时”才是真实范围**（界面文案照此写）
+
+**AVD 验证过程中发现并修掉的三个真问题**（都有回归测试）：
+
+1. 在窗口内的时间开启提醒、之后不再打开应用 → **一条闹钟都不排**，提醒链断掉（`nextStartReminder` 修复）
+2. 协调器把“已到期、系统可能正在迟缓投递”的闹钟**当成不需要而取消** → 你在这段时间打开一次应用，提醒就静静消失（改为 `ReminderAction.LeaveAlone`）
+3. 界面文案与实测不符（原写“可能晚几分钟”）
+
+**未验证 / 验证不了**：授权精确闹钟后的准点投递（`SCHEDULE_EXACT_ALARM` 的授权流程与授权后行为未在 AVD 上验过）；
+拒绍通知权限时的界面状态；划掉最近任务（与 `force-stop` 不同）；真实厂商 ROM 的额外杀后台行为；真机 arm64。
 
 ### Release 流水线（2026-10-13 首次真跑）
 
@@ -206,9 +258,12 @@ MIT License —— 见 [LICENSE](LICENSE)。可以自由使用、修改、再分
 - 踩过并修掉的坑：release job 里没有 checkout、工作目录没有 `.git`，`gh release create` 必须带 `--repo`，
   否则它去读本地 git 会报 `failed to run git: not a git repository`
 
+## 许可证
+
+MIT License —— 见 [LICENSE](LICENSE)。可以自由使用、修改、再分发，保留版权声明即可。
+
 ## 还没做的（可选下一步）
 
-- 每日提醒通知（需要 `POST_NOTIFICATIONS` 权限 + AlarmManager/WorkManager）
 - 桌面小组件显示今日进度
 - 记录导出/导入
 - 每组时间的可视化（把一天的时间点画成时间轴/间隔柱状图）

@@ -1,0 +1,18 @@
+<!-- 通知栏小图标：必须是纯 alpha 图形（系统只取透明度），所以只用最简单的矩形路径 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 横杠 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,10 h10 v4 h-10 z" />
+    <!-- 两侧配重 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,8 h2 v8 h-2 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,8 h2 v8 h-2 z" />
+</vector>
