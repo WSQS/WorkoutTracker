@@ -86,7 +86,11 @@ records_json: {"v":2,"days":{"2026-08-30":{"pushup":[{"at":1788117964287},{"at":
 ## 构建
 
 需要 JDK 17 和 Android SDK（platform 36、build-tools 36.1.0）。
-`local.properties` 里的 `sdk.dir` 指向本机 SDK。
+
+克隆下来后还要告诉 Gradle SDK 在哪，二选一：
+
+- 建一个 `local.properties`（不提交），写 `sdk.dir=/path/to/Android/Sdk`
+- 或者设环境变量 `ANDROID_HOME=/path/to/Android/Sdk`
 
 ```bash
 export JAVA_HOME=/path/to/jdk-17
