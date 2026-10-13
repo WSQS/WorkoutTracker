@@ -153,38 +153,31 @@ jobs:
           # 用证书指纹判断两个包是不是同一签名：同一签名才能互相覆盖安装而不丢数据。
           # 重试是必要的：实测（Windows + 杀软/文件索引）刚写出的 APK 会被短暂占用，
           # apksigner 读不到就退出 1 —— 那会让「验不了」被误当成「未签名」，讲出与事实相反的话。
-          RAW_OUT="$(mktemp)"
-          # 严格约定：函数只把指纹打到 stdout，诊断信息一律走 stderr ——
-          # 否则诊断文字会被命令替换捕获进变量，让「取不到指纹」看起来像「取到了」。
+          # 取证书指纹。两条规矩都是踩过坑后定的：
+          #   1) 绝不丢掉 apksigner 的输出 —— 环境问题（比如 JAVA_HOME 给成了 POSIX 路径，
+          #      Windows 的 .bat 读不了）曾经因为 2>/dev/null 而被误读成「包没签名」，
+          #      于是 Release 说明写出了与事实相反的话；
+          #   2) 用「变量是否为空」配合响亮的失败，而不是默认「空 = 未签名」。
+          VERIFY_OUT="$(mktemp)"
           digest() {
-            local i out=""
-            for i in 1 2 3; do
-              "$APKSIGNER" verify --print-certs "$1" > "$RAW_OUT" 2>&1 || true
-              out="$(grep -o 'SHA-256 digest: [0-9a-f]*' "$RAW_OUT" | head -1 || true)"
-              if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
-              echo "  取指纹失败（第 $i 次），2 秒后重试：$1" >&2
-              sleep 2
-            done
-            return 1
+            "$APKSIGNER" verify --print-certs "$1" > "$VERIFY_OUT" 2>&1 || true
+            grep -o 'SHA-256 digest: [0-9a-f]*' "$VERIFY_OUT" | head -1 || true
           }
-          # 用退出码判断成败，不看变量是否是空串
-          REL_DIGEST=""
-          DBG_DIGEST=""
-          REL_DIGEST="$(digest "$OUT_RELEASE")" || REL_DIGEST=""
-          DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk")" || DBG_DIGEST=""
+          REL_DIGEST="$(digest "$OUT_RELEASE")"
+          DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk")"
           if [ -z "$DBG_DIGEST" ]; then
-            echo "apksigner 最后一次的原始输出："
-            cat "$RAW_OUT" 2>/dev/null || true
+            echo "apksigner 对 debug 包的原始输出："
+            cat "$VERIFY_OUT" 2>/dev/null || true
             echo "::error::debug 包拿不到证书指纹，中止（不把「验不了」当成「未签名」）"
             exit 1
           fi
           if [ "$SIGNED" = yes ] && [ -z "$REL_DIGEST" ]; then
-            echo "apksigner 最后一次的原始输出："
-            cat "$RAW_OUT" 2>/dev/null || true
+            echo "apksigner 对 release 包的原始输出："
+            cat "$VERIFY_OUT" 2>/dev/null || true
             echo "::error::release 包已签名却拿不到指纹，中止以免发布错误结论"
             exit 1
           fi
-          rm -f "$RAW_OUT"
+          rm -f "$VERIFY_OUT"
           if [ -n "$REL_DIGEST" ] && [ "$REL_DIGEST" = "$DBG_DIGEST" ]; then SAME=yes; else SAME=no; fi
           echo "release: $OUT_RELEASE  ${REL_DIGEST:-（无签名）}"
           echo "debug  : dist/WorkoutTracker-${VER}-debug.apk  ${DBG_DIGEST:-（无签名）}"
