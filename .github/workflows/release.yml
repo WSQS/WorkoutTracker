@@ -154,19 +154,24 @@ jobs:
           # 重试是必要的：实测（Windows + 杀软/文件索引）刚写出的 APK 会被短暂占用，
           # apksigner 读不到就退出 1 —— 那会让「验不了」被误当成「未签名」，讲出与事实相反的话。
           RAW_OUT="$(mktemp)"
+          # 严格约定：函数只把指纹打到 stdout，诊断信息一律走 stderr ——
+          # 否则诊断文字会被命令替换捕获进变量，让「取不到指纹」看起来像「取到了」。
           digest() {
             local i out=""
             for i in 1 2 3; do
               "$APKSIGNER" verify --print-certs "$1" > "$RAW_OUT" 2>&1 || true
               out="$(grep -o 'SHA-256 digest: [0-9a-f]*' "$RAW_OUT" | head -1 || true)"
               if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
-              echo "  取指纹失败（第 $i 次），2 秒后重试：$1"
+              echo "  取指纹失败（第 $i 次），2 秒后重试：$1" >&2
               sleep 2
             done
             return 1
           }
-          REL_DIGEST="$(digest "$OUT_RELEASE" || true)"
-          DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk" || true)"
+          # 用退出码判断成败，不看变量是否是空串
+          REL_DIGEST=""
+          DBG_DIGEST=""
+          REL_DIGEST="$(digest "$OUT_RELEASE")" || REL_DIGEST=""
+          DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk")" || DBG_DIGEST=""
           if [ -z "$DBG_DIGEST" ]; then
             echo "apksigner 最后一次的原始输出："
             cat "$RAW_OUT" 2>/dev/null || true
