@@ -138,10 +138,30 @@ jobs:
           fi
           cp app/build/outputs/apk/debug/app-debug.apk "dist/WorkoutTracker-${VER}-debug.apk"
 
+          # 找 apksigner：Linux runner 上是 shell 版，Windows SDK 里只有 .bat
+          # 找不到就报错中止 —— “验不了签名”不能默默变成“没有签名”的结论
+          APKSIGNER=""
+          for cand in "$BT/apksigner" "$BT/apksigner.bat"; do
+            if [ -f "$cand" ]; then APKSIGNER="$cand"; break; fi
+          done
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::在 $BT 里找不到 apksigner，无法校验签名，中止以免发布误导性的说明"
+            exit 1
+          fi
+          echo "apksigner: $APKSIGNER"
+
           # 用证书指纹判断两个包是不是同一签名：同一签名才能互相覆盖安装而不丢数据
-          digest() { "$BT/apksigner" verify --print-certs "$1" 2>/dev/null | grep -o 'SHA-256 digest: [0-9a-f]*' | head -1 || true; }
+          digest() { "$APKSIGNER" verify --print-certs "$1" 2>/dev/null | grep -o 'SHA-256 digest: [0-9a-f]*' | head -1 || true; }
           REL_DIGEST="$(digest "$OUT_RELEASE")"
           DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk")"
+          if [ -z "$DBG_DIGEST" ]; then
+            echo "::error::debug 包取不到证书指纹（apksigner 可能对该文件报错），中止"
+            exit 1
+          fi
+          if [ "$SIGNED" = yes ] && [ -z "$REL_DIGEST" ]; then
+            echo "::error::release 包已签名却取不到指纹，中止以免发布错误结论"
+            exit 1
+          fi
           if [ -n "$REL_DIGEST" ] && [ "$REL_DIGEST" = "$DBG_DIGEST" ]; then SAME=yes; else SAME=no; fi
           echo "release: $OUT_RELEASE  ${REL_DIGEST:-（无签名）}"
           echo "debug  : dist/WorkoutTracker-${VER}-debug.apk  ${DBG_DIGEST:-（无签名）}"
