@@ -196,6 +196,16 @@ app/src/test/java/dev/sopho/workout/data/{StatsTest,MarksTest}.kt
 
 MIT License —— 见 [LICENSE](LICENSE)。可以自由使用、修改、再分发，保留版权声明即可。
 
+### Release 流水线（2026-10-13 首次真跑）
+
+- push tag `v1.1.0` → Actions 构建并自动发布：https://github.com/WSQS/WorkoutTracker/releases/tag/v1.1.0
+- 从**匿名视角**把发布出来的两个包下下来核对：
+  `sha256sum -c SHA256SUMS.txt` 两个文件均 OK；两个包的证书指纹都是 `8f549fbe…`
+  （与本地 `keystore/` 那把一致 ⇒ 能直接覆盖升级已安装的版本、记录不丢）；
+  两个包的 versionCode/versionName 都是 `10100` / `1.1.0`（由 tag 推导）
+- 踩过并修掉的坑：release job 里没有 checkout、工作目录没有 `.git`，`gh release create` 必须带 `--repo`，
+  否则它去读本地 git 会报 `failed to run git: not a git repository`
+
 ## 还没做的（可选下一步）
 
 - 每日提醒通知（需要 `POST_NOTIFICATIONS` 权限 + AlarmManager/WorkManager）
