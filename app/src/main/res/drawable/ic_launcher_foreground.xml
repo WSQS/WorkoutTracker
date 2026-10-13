@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- barbell bar -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M34,51 h40 v6 h-40 z" />
+    <!-- inner plates -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,42 h6 v24 h-6 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M72,42 h6 v24 h-6 z" />
+    <!-- outer plates -->
+    <path
+        android:fillColor="#FFFFCC80"
+        android:pathData="M24,45 h4 v18 h-4 z" />
+    <path
+        android:fillColor="#FFFFCC80"
+        android:pathData="M80,45 h4 v18 h-4 z" />
+</vector>
