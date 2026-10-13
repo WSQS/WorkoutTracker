@@ -29,8 +29,11 @@ android {
         applicationId = "dev.sopho.workout"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        // CI passes the version derived from the release tag (-PversionName=1.2.0 -PversionCode=10200);
+        // local builds just use these defaults. versionCode must keep growing, otherwise Android
+        // refuses to install the new APK over the old one as an update.
+        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
+        versionName = (findProperty("versionName") as String?)?.removePrefix("v") ?: "1.1.0"
     }
 
     signingConfigs {
@@ -45,6 +48,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // With -PsignDebugWithReleaseKey the debug APK gets the SAME signature as the release
+            // APK. Two APKs that share an applicationId but not a signature cannot be installed
+            // over each other: Android forces an uninstall, which wipes the workout records.
+            // Signed with one key they can be swapped freely. Off by default for local builds.
+            if (hasSigningKey && project.hasProperty("signDebugWithReleaseKey")) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = false
             if (hasSigningKey) signingConfig = signingConfigs.getByName("release")

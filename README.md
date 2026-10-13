@@ -129,6 +129,37 @@ keytool -genkeypair -v -keystore keystore/release.jks -alias mykey \
 | `local.properties` | 本机 SDK 路径 |
 | `build/`、`.gradle/`、`.idea/` | 构建产物与 IDE 配置 |
 
+## 自动构建与发布（GitHub Actions）
+
+`.github/workflows/release.yml`：
+
+| 触发 | 结果 |
+| --- | --- |
+| push 到 `main`、对 `main` 的 PR | 构建 + 跑单元测试（不发 Release） |
+| push tag `v1.2.3` | 构建 + 发 Release，附 **release 包**、**debug 包** 与 `SHA256SUMS.txt` |
+| 手动 Run workflow（可填 tag） | 同上；tag 留空则只构建、不发 Release |
+
+版本号由 tag 推导：`v1.2.3` → versionName `1.2.3`、versionCode `10203`（`major*10000+minor*100+patch`）。
+versionCode 必须递增，否则 Android 不把新包当升级；预发布 tag（如 `v1.2.3-rc1`）会减 1，保证正式版能盖过它。
+
+### 想让 Release 里的包能直接装，需要 3 个 secret
+
+不配也能跑，但那样 release 包是**未签名**的（Android 直接拒装），debug 包用的是每次构建都不同的
+CI 临时签名（跨版本安装必须先卸载，**运动记录会一起丢**）。配上之后两个包都用你的正式密钥签名，
+**可以互相覆盖安装、记录不丢**。在你自己的终端里跑（`gh` 需已登录）：
+
+```bash
+base64 -w0 keystore/workout-release.jks > /tmp/ks.b64
+gh secret set KEYSTORE_BASE64 < /tmp/ks.b64
+gh secret set KEYSTORE_PASSWORD --body 'storePassword 的值'
+gh secret set KEY_ALIAS         --body 'workout'
+gh secret set KEY_PASSWORD      --body 'keyPassword 的值'
+rm /tmp/ks.b64
+```
+
+密钥只在 `push` tag / 手动触发时注入 runner；`pull_request` 一律不注入，避免「不信任的代码 + 密钥」同处一台机器。
+（公共仓库的 Actions 分钟数免费。）
+
 ## 代码结构
 
 ```
