@@ -161,6 +161,10 @@ app/src/test/java/dev/sopho/workout/data/{StatsTest,MarksTest}.kt
   - release 包同样验证：5/8 组、`用时 不到 1 分钟 · 含 2 组补记`、弹窗正确、无 `FATAL EXCEPTION`
 - 验证结束后已 `adb uninstall`
 
+## 许可证
+
+MIT License —— 见 [LICENSE](LICENSE)。可以自由使用、修改、再分发，保留版权声明即可。
+
 ## 还没做的（可选下一步）
 
 - 每日提醒通知（需要 `POST_NOTIFICATIONS` 权限 + AlarmManager/WorkManager）
