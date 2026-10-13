@@ -217,12 +217,30 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$SIGNED" = yes ] && [ "$SAME_KEY" = yes ]; then
-            SIGN_LINES="两个包都用正式密钥签名，且**同一签名** —— 可以互相覆盖安装，运动记录不会丢。"
-          elif [ "$SIGNED" = yes ]; then
-            SIGN_LINES="release 包用正式密钥签名；debug 包是 CI 临时签名，两者不能互相覆盖（换装要先卸载，记录会丢）。"
+          if [ "$SIGNED" = yes ]; then
+            RELEASE_FILE="WorkoutTracker-${VER}-release-signed.apk"
+            RELEASE_DESC="正式包，已用正式密钥签名 —— 日常用这个"
+            INSTALL_BLOCK="\`\`\`bash
+          adb install -r ${RELEASE_FILE}
+          \`\`\`"
           else
-            SIGN_LINES="⚠️ 仓库还没配置签名密钥：release 包**未签名**，Android 拒绝安装它（仅作产物存档）；能装的是 debug 包，但它是 CI 临时签名，跨版本安装要先卸载（记录会丢）。"
+            RELEASE_FILE="WorkoutTracker-${VER}-release-unsigned.apk"
+            RELEASE_DESC="**未签名**，Android 直接拒装，只能作为构建产物存档"
+            INSTALL_BLOCK="\`\`\`bash
+          adb install -r WorkoutTracker-${VER}-debug.apk   # 只有这个装得上
+          \`\`\`"
+          fi
+
+          if [ "$SAME_KEY" = yes ]; then
+            SIGN_LINES="两个包都用正式密钥签名，且**同一签名** —— 可以互相覆盖安装，运动记录不会丢。"
+            DEBUG_DESC="调试包，与正式包同一签名（多一个可调试标记，装它可以直接看 logcat）"
+          else
+            DEBUG_DESC="调试包，CI 临时签名，**与正式包不同** —— 换装要先卸载，运动记录会丢"
+            if [ "$SIGNED" = yes ]; then
+              SIGN_LINES="release 包用正式密钥签名；debug 包是 CI 临时签名，两者不能互相覆盖。"
+            else
+              SIGN_LINES="⚠️ 仓库还没配置签名密钥（KEYSTORE_BASE64）：下面这个 release 包装不上，能装的只有 debug 包，但它是 CI 临时签名，跨版本安装要先卸载（记录会丢）。"
+            fi
           fi
 
           cat > notes.md <<EOF
@@ -232,15 +250,13 @@ jobs:
 
           | 文件 | 说明 |
           | --- | --- |
-          | \`WorkoutTracker-${VER}-release-*.apk\` | 正式包，日常用这个 |
-          | \`WorkoutTracker-${VER}-debug.apk\` | 调试包：多一个可调试标记，装它可以直接看 logcat |
+          | \`${RELEASE_FILE}\` | ${RELEASE_DESC} |
+          | \`WorkoutTracker-${VER}-debug.apk\` | ${DEBUG_DESC} |
           | \`SHA256SUMS.txt\` | 两个包的 SHA-256 |
 
-          安装（换成同一签名的包不会丢数据）：
+          安装：
 
-          \`\`\`bash
-          adb install -r WorkoutTracker-${VER}-release-signed.apk
-          \`\`\`
+          ${INSTALL_BLOCK}
 
           - 包名 \`dev.sopho.workout\`，minSdk 26，targetSdk 36，零权限、不联网
           - 版本由 tag 推导：\`${TAG}\` → versionName \`${VER}\` / versionCode \`${CODE}\`
