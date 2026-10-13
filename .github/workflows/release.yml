@@ -150,18 +150,36 @@ jobs:
           fi
           echo "apksigner: $APKSIGNER"
 
-          # 用证书指纹判断两个包是不是同一签名：同一签名才能互相覆盖安装而不丢数据
-          digest() { "$APKSIGNER" verify --print-certs "$1" 2>/dev/null | grep -o 'SHA-256 digest: [0-9a-f]*' | head -1 || true; }
-          REL_DIGEST="$(digest "$OUT_RELEASE")"
-          DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk")"
+          # 用证书指纹判断两个包是不是同一签名：同一签名才能互相覆盖安装而不丢数据。
+          # 重试是必要的：实测（Windows + 杀软/文件索引）刚写出的 APK 会被短暂占用，
+          # apksigner 读不到就退出 1 —— 那会让「验不了」被误当成「未签名」，讲出与事实相反的话。
+          RAW_OUT="$(mktemp)"
+          digest() {
+            local i out=""
+            for i in 1 2 3; do
+              "$APKSIGNER" verify --print-certs "$1" > "$RAW_OUT" 2>&1 || true
+              out="$(grep -o 'SHA-256 digest: [0-9a-f]*' "$RAW_OUT" | head -1 || true)"
+              if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
+              echo "  取指纹失败（第 $i 次），2 秒后重试：$1"
+              sleep 2
+            done
+            return 1
+          }
+          REL_DIGEST="$(digest "$OUT_RELEASE" || true)"
+          DBG_DIGEST="$(digest "dist/WorkoutTracker-${VER}-debug.apk" || true)"
           if [ -z "$DBG_DIGEST" ]; then
-            echo "::error::debug 包取不到证书指纹（apksigner 可能对该文件报错），中止"
+            echo "apksigner 最后一次的原始输出："
+            cat "$RAW_OUT" 2>/dev/null || true
+            echo "::error::debug 包拿不到证书指纹，中止（不把「验不了」当成「未签名」）"
             exit 1
           fi
           if [ "$SIGNED" = yes ] && [ -z "$REL_DIGEST" ]; then
-            echo "::error::release 包已签名却取不到指纹，中止以免发布错误结论"
+            echo "apksigner 最后一次的原始输出："
+            cat "$RAW_OUT" 2>/dev/null || true
+            echo "::error::release 包已签名却拿不到指纹，中止以免发布错误结论"
             exit 1
           fi
+          rm -f "$RAW_OUT"
           if [ -n "$REL_DIGEST" ] && [ "$REL_DIGEST" = "$DBG_DIGEST" ]; then SAME=yes; else SAME=no; fi
           echo "release: $OUT_RELEASE  ${REL_DIGEST:-（无签名）}"
           echo "debug  : dist/WorkoutTracker-${VER}-debug.apk  ${DBG_DIGEST:-（无签名）}"
