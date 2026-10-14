@@ -59,6 +59,17 @@ jobs:
       - name: 配置 Gradle 缓存
         uses: gradle/actions/setup-gradle@v4
 
+      - name: 防止界面里写死版本号
+        run: |
+          set -euo pipefail
+          # 关于页曾经写死 "每日运动 v1.0.0"，之后每次发版都对不上，直到有人装到手机上才看见。
+          # 版本号必须来自 BuildConfig.VERSION_NAME（它随 tag 变化）。
+          if grep -rnE '"[^"]*v[0-9]+\.[0-9]+\.[0-9]+' app/src/main/java/dev/sopho/workout/ui/; then
+            echo "::error::界面里出现了写死的版本号，请改用 BuildConfig.VERSION_NAME"
+            exit 1
+          fi
+          echo "界面里没有写死的版本号 ✓"
+
       - name: 从 tag 推导版本号
         id: version
         run: |

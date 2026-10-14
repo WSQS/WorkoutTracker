@@ -74,6 +74,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 关于页要显示真实版本号（它随 tag 变化），所以需要 BuildConfig
+        buildConfig = true
     }
 
     packaging {

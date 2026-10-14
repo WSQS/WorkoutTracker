@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.sopho.workout.BuildConfig
 import dev.sopho.workout.data.Exercise
 import dev.sopho.workout.data.MAX_REPS
 import dev.sopho.workout.data.MAX_SETS
@@ -159,11 +160,13 @@ fun SettingsScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "每日运动 v1.0.0",
+                    // 版本号必须来自构建，不要写字面量：这里曾经写死过，之后每次发版都对不上
+                    text = "每日运动 v${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    text = "记录只保存在本机应用私有目录，不联网、不申请任何权限；卸载应用会一并删除数据。",
+                    text = "记录只保存在本机应用私有目录，不联网；权限只用于提醒（通知权限 + 可选的精确闹钟），" +
+                        "卸载应用会一并删除数据。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

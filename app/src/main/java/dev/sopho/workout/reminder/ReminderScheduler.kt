@@ -12,7 +12,7 @@ import dev.sopho.workout.data.ReminderMode
 /**
  * 把一个待办变成系统里的一次闹钟。
  *
- * 有精确闹钟权限时用精确闹钟；没有就回退到 `setAndAllowWhileIdle`（零权限，但可能晚几分钟）。
+ * 有精确闹钟权限时用精确闹钟；没有就回退到 `setAndAllowWhileIdle`（零权限，但实测系统的投递窗口可达 20 分钟以上）。
  * 两个用途各用一个**稳定身份**的 PendingIntent：到期时刻放在 extra 里（靠 FLAG_UPDATE_CURRENT 更新），
  * 这样"重排"天然覆盖旧闹钟、"取消"只需按用途来，不必记住上次排的是几点。
  */

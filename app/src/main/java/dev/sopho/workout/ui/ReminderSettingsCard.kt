@@ -37,7 +37,7 @@ import dev.sopho.workout.data.ReminderSettings
 
 /**
  * 设置页里的「提醒」卡。权限不是装饰：通知权限没有时，提醒**一条都发不出去**；
- * 精确闹钟权限没有时会退回近似模式（可能晚几分钟）—— 两种状态都必须如实显示出来。
+ * 精确闹钟权限没有时会退回近似模式（实测投递窗口 20 分钟到 1 小时）—— 两种状态都必须如实显示出来。
  */
 @Composable
 fun ReminderSettingsCard(
