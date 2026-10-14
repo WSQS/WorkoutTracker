@@ -22,6 +22,12 @@ class ReminderCenter(private val context: Context, private val store: WorkoutSto
         val outstanding = store.pendings(now)
         val zone = ZoneId.systemDefault()
 
+        // 提醒开着就把通知渠道建好：这样你第一次发提醒之前，就能在系统设置里看到并调整它
+        // （渠道是第一次发通知时才创建的旧做法，会让你在“设置→通知”里找不到东西）。
+        if (store.reminderSettings.value.enabled) {
+            notifier.ensureChannels()
+        }
+
         for (kind in ReminderKind.entries) {
             val action = reminderAction(
                 kind = kind,

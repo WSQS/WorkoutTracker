@@ -71,6 +71,15 @@ class ReminderNotifier(private val context: Context) {
     /** 你勾选了（或待办已不存在）→ 把那条提醒撤掉 */
     fun cancel() = manager.cancel(NOTIFICATION_ID)
 
+    /**
+     * 创建两个通知渠道。
+     *
+     * 注意两件事：
+     *  1. 振动是**按渠道**控制的（Android 8+），不在渠道上设振动模式就是不震 —— 曾经因为漏了这一步，
+     *     “提示音+震动”里只剩了提示音。
+     *  2. 渠道创建后，应用**改不了**它的重要度/振动/声音（只能改名字与描述）——所以设错了只能换 id。
+     *     这里给 id 带版本号并删掉旧的，保证已有安装也能真正拿到新设置。
+     */
     fun ensureChannels() {
         val channels = listOf(
             channelId(ReminderKind.StartOfDay) to "开始提醒",
@@ -79,8 +88,14 @@ class ReminderNotifier(private val context: Context) {
         for ((id, name) in channels) {
             val channel = NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "每日运动"
+                enableVibration(true)
+                vibrationPattern = VIBRATION_PATTERN
             }
             manager.createNotificationChannel(channel)
+        }
+        // 清掉没有版本号的旧渠道，别在设置里留一堆
+        for (old in LEGACY_CHANNEL_IDS) {
+            manager.deleteNotificationChannel(old)
         }
     }
 
@@ -98,6 +113,16 @@ class ReminderNotifier(private val context: Context) {
     companion object {
         const val NOTIFICATION_ID = 1001
 
-        fun channelId(kind: ReminderKind): String = "reminder_${kind.name.lowercase()}"
+        /** 两下短震（等待 0ms、震 300ms、停 200ms、再震 300ms） */
+        private val VIBRATION_PATTERN = longArrayOf(0, 300, 200, 300)
+
+        /** 渠道 id 带版本：渠道创建后改不了重要度/振动，改设置只能换 id（见 ensureChannels） */
+        private const val CHANNEL_VERSION = 2
+
+        /** 没有版本号的旧渠道（只在 1.2.0 试装时短暂存在过） */
+        private val LEGACY_CHANNEL_IDS = listOf("reminder_startofday", "reminder_nextset")
+
+        fun channelId(kind: ReminderKind): String =
+            "reminder_${kind.name.lowercase()}_v$CHANNEL_VERSION"
     }
 }
